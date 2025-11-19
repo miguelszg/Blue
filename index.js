@@ -4,7 +4,7 @@ const os = require('os');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = process.env.VERSION || '1.0.0';
+const VERSION = process.env.VERSION || '1.1.0'; //Nueva version
 const ENVIRONMENT = process.env.ENVIRONMENT || 'blue';
 
 app.use(express.static('public'));
