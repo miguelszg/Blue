@@ -9,6 +9,16 @@ const ENVIRONMENT = process.env.ENVIRONMENT || 'blue';
 
 app.use(express.static('public'));
 
+app.get('/', (req, res) => {
+  res.json({
+    message: '¡Hola desde Blue-Green Deployment! v2.0', 
+    version: VERSION,
+    environment: ENVIRONMENT,
+    hostname: os.hostname(),
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
