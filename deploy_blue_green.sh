@@ -34,30 +34,31 @@ echo "📊 Entorno activo actual: $ACTIVE_SLOT"
 echo "🎯 Desplegando en: $INACTIVE_SLOT (puerto $INACTIVE_PORT)"
 echo "=========================================="
 
-# --- 3. Construir nueva imagen ---
+# --- 3. Limpiar completamente el contenedor inactivo ---
+echo "🧹 Limpiando $INACTIVE_SLOT..."
+docker stop $INACTIVE_SLOT 2>/dev/null || true
+docker rm -f $INACTIVE_SLOT 2>/dev/null || true
+
+# --- 4. Construir nueva imagen ---
 echo "🔨 Construyendo imagen para $INACTIVE_SLOT..."
 docker-compose build --no-cache $INACTIVE_SLOT
 
-# --- 4. Detener el contenedor inactivo si existe ---
-echo "🛑 Deteniendo $INACTIVE_SLOT (si existe)..."
-docker-compose stop $INACTIVE_SLOT 2>/dev/null || true
-
-# --- 5. Iniciar contenedor inactivo ---
+# --- 5. Iniciar contenedor inactivo (sin force-recreate) ---
 echo "▶️  Iniciando contenedor $INACTIVE_SLOT..."
-docker-compose up -d $INACTIVE_SLOT
+docker-compose up -d --no-deps $INACTIVE_SLOT
 
 # --- 6. Health check ---
-echo "🏥 Esperando 10s para health check..."
-sleep 10
+echo "🏥 Esperando 15s para health check..."
+sleep 15
 
-HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$INACTIVE_PORT/health)
+HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$INACTIVE_PORT/health || echo "000")
 
 if [ "$HEALTH_CHECK" -eq 200 ]; then
     echo "✅ Health check exitoso en puerto $INACTIVE_PORT"
-    
+
     # --- 7. Actualizar nginx.conf para apuntar al nuevo contenedor ---
-     echo "🔄 Cambiando tráfico de Nginx a $INACTIVE_SLOT..."
-    
+    echo "🔄 Cambiando tráfico de Nginx a $INACTIVE_SLOT..."
+
     cat > nginx.conf << EOF
 events {
     worker_connections 1024;
@@ -70,7 +71,7 @@ http {
 
     server {
         listen 80;
-        
+
         location / {
             proxy_pass http://backend;
             proxy_set_header Host \$host;
@@ -89,35 +90,37 @@ http {
     }
 }
 EOF
-    
+
     # Reiniciar nginx con docker-compose
     echo "🔄 Reiniciando Nginx..."
-    docker-compose restart nginx || docker-compose up -d nginx
-    
+    docker-compose up -d nginx
+    docker-compose restart nginx
+
     echo "⏳ Esperando 5s para que Nginx aplique cambios..."
     sleep 5
-    
+
     # --- 8. Detener contenedor antiguo ---
     echo "🛑 Deteniendo contenedor antiguo: $ACTIVE_SLOT..."
-    docker-compose stop $ACTIVE_SLOT
-    
+    docker stop $ACTIVE_SLOT 2>/dev/null || true
+
     # --- 9. Actualizar estado ---
     echo "CURRENT_PRODUCTION=$INACTIVE_SLOT" > "$ENV_FILE"
-    
+
     echo "=========================================="
     echo "✅ ¡Despliegue completado exitosamente!"
     echo "📦 Nuevo entorno activo: $INACTIVE_SLOT"
     echo "🔌 Puerto: $INACTIVE_PORT"
     echo "=========================================="
-    
+
     # Mostrar estado final
     echo ""
     echo "Estado final:"
     curl -s http://localhost/deployment-status | jq 2>/dev/null || curl -s http://localhost/deployment-status
-    
+
 else
     echo "❌ Health check falló en puerto $INACTIVE_PORT (HTTP $HEALTH_CHECK)"
     echo "🔙 Rollback: deteniendo $INACTIVE_SLOT"
-    docker-compose stop $INACTIVE_SLOT
+    docker stop $INACTIVE_SLOT 2>/dev/null || true
+    docker rm -f $INACTIVE_SLOT 2>/dev/null || true
     exit 1
 fi
