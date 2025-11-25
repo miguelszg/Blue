@@ -6,6 +6,7 @@ const ENV = process.env.NODE_ENV || 'development';
 
 app.get('/', (req, res) => {
   res.json({
+    deployNumber: 4,
     message: 'Hello from Blue-Green Deployment! 4.0',
     version: VERSION,
     environment: ENV,
