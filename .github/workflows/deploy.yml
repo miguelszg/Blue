@@ -19,17 +19,18 @@ jobs:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.SSH_PRIVATE_KEY }}
+        command_timeout: 30m
         script: |
           cd ~/blue
           
-          # Configurar git
+          # Configurar git para evitar conflictos
           git config pull.rebase false
           
-          # Pull con reset hard para evitar conflictos
-          git fetch origin
+          # Obtener cambios sin merge
+          git fetch origin master
           git reset --hard origin/master
           
-          # Dar permisos
+          # Dar permisos al script
           chmod +x deploy_blue_green.sh
           
           # Ejecutar deploy
