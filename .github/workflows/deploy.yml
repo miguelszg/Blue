@@ -21,6 +21,16 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd ~/blue
-          git pull origin master
+          
+          # Configurar git
+          git config pull.rebase false
+          
+          # Pull con reset hard para evitar conflictos
+          git fetch origin
+          git reset --hard origin/master
+          
+          # Dar permisos
           chmod +x deploy_blue_green.sh
+          
+          # Ejecutar deploy
           ./deploy_blue_green.sh
