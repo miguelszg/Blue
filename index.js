@@ -1,46 +1,45 @@
 const express = require('express');
-const path = require('path');
-const os = require('os');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = process.env.VERSION || '1.1.0'; //Nueva version
-const ENVIRONMENT = process.env.ENVIRONMENT || 'blue';
-
-app.use(express.static('public'));
+const VERSION = process.env.VERSION || 'unknown';
+const ENV = process.env.NODE_ENV || 'development';
 
 app.get('/', (req, res) => {
   res.json({
-    message: '¡Hola desde Blue-Green Deployment! v4.0', 
+    message: 'Hello from Blue-Green Deployment!',
     version: VERSION,
-    environment: ENVIRONMENT,
-    hostname: os.hostname(),
+    environment: ENV,
+    hostname: require('os').hostname(),
     timestamp: new Date().toISOString()
   });
 });
 
 app.get('/health', (req, res) => {
-  res.json({
+  res.status(200).json({
     status: 'healthy',
     version: VERSION,
-    environment: ENVIRONMENT,
-    hostname: os.hostname(),
+    environment: VERSION,
+    hostname: require('os').hostname(),
     timestamp: new Date().toISOString()
   });
 });
 
-app.get('/api/info', (req, res) => {
+// ✨ NUEVA RUTA - Deployment Status
+app.get('/deployment-status', (req, res) => {
   res.json({
+    status: 'active',
     version: VERSION,
-    environment: ENVIRONMENT,
-    hostname: os.hostname(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage()
+    environment: VERSION,
+    port: PORT,
+    student: 'Miguel',  // ← TU NOMBRE
+    hostname: require('os').hostname(),
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
   });
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📦 Version: ${VERSION}`);
-  console.log(`🎨 Environment: ${ENVIRONMENT}`);
+  console.log(`🎨 Environment: ${ENV}`);
 });
