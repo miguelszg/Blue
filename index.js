@@ -11,7 +11,7 @@ app.use(express.static('public'));
 
 app.get('/', (req, res) => {
   res.json({
-    message: '¡Hola desde Blue-Green Deployment! v3.0', 
+    message: '¡Hola desde Blue-Green Deployment! v4.0', 
     version: VERSION,
     environment: ENVIRONMENT,
     hostname: os.hostname(),
