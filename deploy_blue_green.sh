@@ -30,23 +30,18 @@ fi
 echo "📊 Activo: $ACTIVE_SLOT → Desplegando: $INACTIVE_SLOT (puerto $INACTIVE_PORT)"
 echo "=========================================="
 
-# Limpiar COMPLETAMENTE el slot inactivo
-echo "🧹 Limpieza profunda de $INACTIVE_SLOT..."
-docker-compose stop $INACTIVE_SLOT 2>/dev/null || true
-docker-compose rm -f -s -v $INACTIVE_SLOT 2>/dev/null || true
-CONTAINER_ID=$(docker ps -a -q -f name=$INACTIVE_SLOT)
-if [ ! -z "$CONTAINER_ID" ]; then
-    docker rm -f $CONTAINER_ID 2>/dev/null || true
-fi
+# Limpiar completamente el slot inactivo
+echo "🧹 Limpiando $INACTIVE_SLOT..."
+docker stop app-$INACTIVE_SLOT 2>/dev/null || true
+docker rm -f app-$INACTIVE_SLOT 2>/dev/null || true
 
 # Construir imagen
 echo "🔨 Construyendo imagen..."
 docker-compose build --no-cache $INACTIVE_SLOT
 
 # Crear y arrancar contenedor nuevo
-echo "▶️  Creando contenedor nuevo..."
-docker-compose create $INACTIVE_SLOT
-docker-compose start $INACTIVE_SLOT
+echo "▶️  Iniciando $INACTIVE_SLOT..."
+docker-compose up -d --no-deps $INACTIVE_SLOT
 
 # Health check
 echo "🏥 Health check (15s)..."
@@ -90,13 +85,13 @@ http {
 }
 EOF
     
-    docker-compose up -d nginx
     docker-compose restart nginx
     sleep 5
     
-    # Detener antiguo
-    echo "🛑 Deteniendo $ACTIVE_SLOT..."
-    docker-compose stop $ACTIVE_SLOT
+    # Detener y ELIMINAR antiguo
+    echo "🛑 Deteniendo y eliminando $ACTIVE_SLOT..."
+    docker stop app-$ACTIVE_SLOT 2>/dev/null || true
+    docker rm app-$ACTIVE_SLOT 2>/dev/null || true
     
     # Actualizar estado
     echo "CURRENT_PRODUCTION=$INACTIVE_SLOT" > "$ENV_FILE"
@@ -108,7 +103,7 @@ EOF
     
 else
     echo "❌ Health check falló (HTTP $HEALTH)"
-    docker-compose stop $INACTIVE_SLOT 2>/dev/null || true
-    docker-compose rm -f $INACTIVE_SLOT 2>/dev/null || true
+    docker stop app-$INACTIVE_SLOT 2>/dev/null || true
+    docker rm -f app-$INACTIVE_SLOT 2>/dev/null || true
     exit 1
 fi
