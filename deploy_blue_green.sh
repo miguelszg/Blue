@@ -1,25 +1,22 @@
 #!/bin/bash
 set -e
 
-# --- Configuración ---
 APP_DIR="$HOME/blue"
 ENV_FILE="$APP_DIR/.env"
-
 cd "$APP_DIR"
 
 echo "=========================================="
 echo "🚀 Blue-Green Deployment"
 echo "=========================================="
 
-# --- 1. Leer el estado actual ---
+# Crear .env si no existe
 if [ ! -f "$ENV_FILE" ]; then
-    echo "📝 Creando .env inicial con blue"
-    echo "CURRENT_PRODUCTION=blue" > "$ENV_FILE"
+    echo "CURRENT_PRODUCTION=green" > "$ENV_FILE"
 fi
 
 source "$ENV_FILE"
 
-# --- 2. Determinar slots ---
+# Determinar slots
 if [ "$CURRENT_PRODUCTION" == "blue" ]; then
     INACTIVE_SLOT="green"
     ACTIVE_SLOT="blue"
@@ -30,35 +27,37 @@ else
     INACTIVE_PORT=3001
 fi
 
-echo "📊 Entorno activo actual: $ACTIVE_SLOT"
-echo "🎯 Desplegando en: $INACTIVE_SLOT (puerto $INACTIVE_PORT)"
+echo "📊 Activo: $ACTIVE_SLOT → Desplegando: $INACTIVE_SLOT (puerto $INACTIVE_PORT)"
 echo "=========================================="
 
-# --- 3. Limpiar completamente el contenedor inactivo ---
-echo "🧹 Limpiando $INACTIVE_SLOT..."
-docker stop $INACTIVE_SLOT 2>/dev/null || true
-docker rm -f $INACTIVE_SLOT 2>/dev/null || true
+# Limpiar COMPLETAMENTE el slot inactivo
+echo "🧹 Limpieza profunda de $INACTIVE_SLOT..."
+docker-compose stop $INACTIVE_SLOT 2>/dev/null || true
+docker-compose rm -f -s -v $INACTIVE_SLOT 2>/dev/null || true
+CONTAINER_ID=$(docker ps -a -q -f name=$INACTIVE_SLOT)
+if [ ! -z "$CONTAINER_ID" ]; then
+    docker rm -f $CONTAINER_ID 2>/dev/null || true
+fi
 
-# --- 4. Construir nueva imagen ---
-echo "🔨 Construyendo imagen para $INACTIVE_SLOT..."
+# Construir imagen
+echo "🔨 Construyendo imagen..."
 docker-compose build --no-cache $INACTIVE_SLOT
 
-# --- 5. Iniciar contenedor inactivo (sin force-recreate) ---
-echo "▶️  Iniciando contenedor $INACTIVE_SLOT..."
-docker-compose up -d --no-deps $INACTIVE_SLOT
+# Crear y arrancar contenedor nuevo
+echo "▶️  Creando contenedor nuevo..."
+docker-compose create $INACTIVE_SLOT
+docker-compose start $INACTIVE_SLOT
 
-# --- 6. Health check ---
-echo "🏥 Esperando 15s para health check..."
+# Health check
+echo "🏥 Health check (15s)..."
 sleep 15
+HEALTH=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$INACTIVE_PORT/health || echo "000")
 
-HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$INACTIVE_PORT/health || echo "000")
-
-if [ "$HEALTH_CHECK" -eq 200 ]; then
-    echo "✅ Health check exitoso en puerto $INACTIVE_PORT"
-
-    # --- 7. Actualizar nginx.conf para apuntar al nuevo contenedor ---
-    echo "🔄 Cambiando tráfico de Nginx a $INACTIVE_SLOT..."
-
+if [ "$HEALTH" -eq 200 ]; then
+    echo "✅ Health check OK"
+    
+    # Actualizar nginx
+    echo "🔄 Actualizando Nginx..."
     cat > nginx.conf << EOF
 events {
     worker_connections 1024;
@@ -71,7 +70,7 @@ http {
 
     server {
         listen 80;
-
+        
         location / {
             proxy_pass http://backend;
             proxy_set_header Host \$host;
@@ -90,37 +89,26 @@ http {
     }
 }
 EOF
-
-    # Reiniciar nginx con docker-compose
-    echo "🔄 Reiniciando Nginx..."
+    
     docker-compose up -d nginx
     docker-compose restart nginx
-
-    echo "⏳ Esperando 5s para que Nginx aplique cambios..."
     sleep 5
-
-    # --- 8. Detener contenedor antiguo ---
-    echo "🛑 Deteniendo contenedor antiguo: $ACTIVE_SLOT..."
-    docker stop $ACTIVE_SLOT 2>/dev/null || true
-
-    # --- 9. Actualizar estado ---
+    
+    # Detener antiguo
+    echo "🛑 Deteniendo $ACTIVE_SLOT..."
+    docker-compose stop $ACTIVE_SLOT
+    
+    # Actualizar estado
     echo "CURRENT_PRODUCTION=$INACTIVE_SLOT" > "$ENV_FILE"
-
+    
     echo "=========================================="
-    echo "✅ ¡Despliegue completado exitosamente!"
-    echo "📦 Nuevo entorno activo: $INACTIVE_SLOT"
-    echo "🔌 Puerto: $INACTIVE_PORT"
+    echo "✅ Deploy exitoso: $INACTIVE_SLOT activo"
     echo "=========================================="
-
-    # Mostrar estado final
-    echo ""
-    echo "Estado final:"
-    curl -s http://localhost/deployment-status | jq 2>/dev/null || curl -s http://localhost/deployment-status
-
+    curl -s http://localhost/deployment-status | jq -c 2>/dev/null || curl -s http://localhost/deployment-status
+    
 else
-    echo "❌ Health check falló en puerto $INACTIVE_PORT (HTTP $HEALTH_CHECK)"
-    echo "🔙 Rollback: deteniendo $INACTIVE_SLOT"
-    docker stop $INACTIVE_SLOT 2>/dev/null || true
-    docker rm -f $INACTIVE_SLOT 2>/dev/null || true
+    echo "❌ Health check falló (HTTP $HEALTH)"
+    docker-compose stop $INACTIVE_SLOT 2>/dev/null || true
+    docker-compose rm -f $INACTIVE_SLOT 2>/dev/null || true
     exit 1
 fi
