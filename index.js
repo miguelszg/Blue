@@ -6,7 +6,7 @@ const ENV = process.env.NODE_ENV || 'development';
 
 app.get('/', (req, res) => {
   res.json({
-    message: 'Hello from Blue-Green Deployment! 2.1',
+    message: 'Hello from Blue-Green Deployment! 2.2',
     version: VERSION,
     environment: ENV,
     hostname: require('os').hostname(),
