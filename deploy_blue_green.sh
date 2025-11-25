@@ -56,13 +56,43 @@ if [ "$HEALTH_CHECK" -eq 200 ]; then
     echo "✅ Health check exitoso en puerto $INACTIVE_PORT"
     
     # --- 7. Actualizar nginx.conf para apuntar al nuevo contenedor ---
-    echo "🔄 Cambiando tráfico de Nginx a $INACTIVE_SLOT..."
+     echo "🔄 Cambiando tráfico de Nginx a $INACTIVE_SLOT..."
     
-    sed -i "s/server app-blue:3000;/server app-$INACTIVE_SLOT:3000;/g" nginx.conf
-    sed -i "s/server app-green:3000;/server app-$INACTIVE_SLOT:3000;/g" nginx.conf
+    cat > nginx.conf << EOF
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream backend {
+        server app-$INACTIVE_SLOT:3000;
+    }
+
+    server {
+        listen 80;
+        
+        location / {
+            proxy_pass http://backend;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
+            proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto \$scheme;
+        }
+
+        location /health {
+            proxy_pass http://backend/health;
+        }
+
+        location /deployment-status {
+            proxy_pass http://backend/deployment-status;
+        }
+    }
+}
+EOF
     
-    # Reiniciar nginx para aplicar cambios
-    docker-compose restart nginx
+    # Reiniciar nginx con docker-compose
+    echo "🔄 Reiniciando Nginx..."
+    docker-compose restart nginx || docker-compose up -d nginx
     
     echo "⏳ Esperando 5s para que Nginx aplique cambios..."
     sleep 5
